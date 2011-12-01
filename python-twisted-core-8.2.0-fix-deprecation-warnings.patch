@@ -1,0 +1,784 @@
+diff -up TwistedCore-8.2.0/twisted/conch/test/test_ckeygen.py.fix-hash-deprecation TwistedCore-8.2.0/twisted/conch/test/test_ckeygen.py
+--- TwistedCore-8.2.0/twisted/conch/test/test_ckeygen.py.fix-hash-deprecation	2010-06-08 14:49:17.592234186 -0400
++++ TwistedCore-8.2.0/twisted/conch/test/test_ckeygen.py	2010-06-08 14:49:17.592234186 -0400
+@@ -0,0 +1,73 @@
++# Copyright (c) 2008 Twisted Matrix Laboratories.
++# See LICENSE for details.
++
++"""
++Tests for L{twisted.conch.scripts.ckeygen}.
++"""
++
++import sys
++from StringIO import StringIO
++
++from twisted.python.filepath import FilePath
++from twisted.trial.unittest import TestCase
++from twisted.conch.ssh.keys import Key
++from twisted.conch.scripts.ckeygen import printFingerprint, _saveKey
++from twisted.conch.test.keydata import publicRSA_openssh, privateRSA_openssh
++
++
++
++class KeyGenTests(TestCase):
++    """
++    Tests for various functions used to implement the I{ckeygen} script.
++    """
++    def setUp(self):
++        """
++        Patch C{sys.stdout} with a L{StringIO} instance to tests can make
++        assertions about what's printed.
++        """
++        self.stdout = StringIO()
++        self.patch(sys, 'stdout', self.stdout)
++
++
++    def test_printFingerprint(self):
++        """
++        L{printFingerprint} writes a line to standard out giving the number of
++        bits of the key, its fingerprint, and the basename of the file from it
++        was read.
++        """
++        filename = self.mktemp()
++        FilePath(filename).setContent(publicRSA_openssh)
++        printFingerprint({'filename': filename})
++        self.assertEqual(
++            self.stdout.getvalue(),
++            '768 3d:13:5f:cb:c9:79:8a:93:06:27:65:bc:3d:0b:8f:af temp\n')
++
++
++    def test_saveKey(self):
++        """
++        L{_saveKey} writes the private and public parts of a key to two
++        different files and writes a report of this to standard out.
++        """
++        base = FilePath(self.mktemp())
++        base.makedirs()
++        filename = base.child('id_rsa').path
++        key = Key.fromString(privateRSA_openssh)
++        _saveKey(
++            key.keyObject,
++            {'filename': filename, 'pass': 'passphrase'})
++        self.assertEqual(
++            self.stdout.getvalue(),
++            "Your identification has been saved in %s\n"
++            "Your public key has been saved in %s.pub\n"
++            "The key fingerprint is:\n"
++            "3d:13:5f:cb:c9:79:8a:93:06:27:65:bc:3d:0b:8f:af\n" % (
++                filename,
++                filename))
++        self.assertEqual(
++            key.fromString(
++                base.child('id_rsa').getContent(), None, 'passphrase'),
++            key)
++        self.assertEqual(
++            Key.fromString(base.child('id_rsa.pub').getContent()),
++            key.public())
++
+diff -up TwistedCore-8.2.0/twisted/cred/util.py.fix-hash-deprecation TwistedCore-8.2.0/twisted/cred/util.py
+--- TwistedCore-8.2.0/twisted/cred/util.py.fix-hash-deprecation	2008-07-29 16:13:54.000000000 -0400
++++ TwistedCore-8.2.0/twisted/cred/util.py	2010-06-08 14:49:17.592234186 -0400
+@@ -1,30 +1,32 @@
+-
+-# Copyright (c) 2001-2004 Twisted Matrix Laboratories.
++# -*- test-case-name: twisted.test.test_newcred -*-
++# Copyright (c) 2001-2008 Twisted Matrix Laboratories.
+ # See LICENSE for details.
+ 
+-
+ """
+-Utility functions for authorization.
++Outdated, deprecated functionality related to challenge-based authentication.
+ 
+-These are currently for challenge-response shared secret authentication.
+-
+-Maintainer: Glyph Lefkowitz
++Seek a solution to your problem elsewhere.  This module is deprecated.
+ """
+ 
+ # System Imports
+-import md5
+-import random
++import random, warnings
+ 
++from twisted.python.hashlib import md5
+ from twisted.cred.error import Unauthorized
+ 
++
+ def respond(challenge, password):
+     """Respond to a challenge.
+     This is useful for challenge/response authentication.
+     """
+-    m = md5.new()
++    warnings.warn(
++        "twisted.cred.util.respond is deprecated since Twisted 8.3.",
++        category=PendingDeprecationWarning,
++        stacklevel=2)
++    m = md5()
+     m.update(password)
+     hashedPassword = m.digest()
+-    m = md5.new()
++    m = md5()
+     m.update(hashedPassword)
+     m.update(challenge)
+     doubleHashedPassword = m.digest()
+@@ -33,8 +35,12 @@ def respond(challenge, password):
+ def challenge():
+     """I return some random data.
+     """
++    warnings.warn(
++        "twisted.cred.util.challenge is deprecated since Twisted 8.3.",
++        category=PendingDeprecationWarning,
++        stacklevel=2)
+     crap = ''
+     for x in range(random.randrange(15,25)):
+         crap = crap + chr(random.randint(65,90))
+-    crap = md5.new(crap).digest()
++    crap = md5(crap).digest()
+     return crap
+diff -up TwistedCore-8.2.0/twisted/internet/_sslverify.py.fix-hash-deprecation TwistedCore-8.2.0/twisted/internet/_sslverify.py
+--- TwistedCore-8.2.0/twisted/internet/_sslverify.py.fix-hash-deprecation	2008-11-20 13:36:39.000000000 -0500
++++ TwistedCore-8.2.0/twisted/internet/_sslverify.py	2010-06-08 14:50:07.307105993 -0400
+@@ -2,10 +2,11 @@
+ # Copyright 2005 Divmod, Inc.  See LICENSE file for details
+ # Copyright (c) 2005-2008 Twisted Matrix Laboratories.
+ 
+-import itertools, md5
++import itertools
+ from OpenSSL import SSL, crypto
+ 
+ from twisted.python import reflect, util
++from twisted.python.hashlib import md5
+ from twisted.internet.defer import Deferred
+ from twisted.internet.error import VerifyError, CertificateError
+ 
+@@ -452,7 +453,7 @@ class PublicKey:
+         MD5 hex digest of signature on an empty certificate request with this
+         key.
+         """
+-        return md5.md5(self._emptyReq).hexdigest()
++        return md5(self._emptyReq).hexdigest()
+ 
+ 
+     def inspect(self):
+@@ -736,7 +737,7 @@ class OpenSSLCertificateOptions(object):
+             ctx.set_options(self._OP_ALL)
+ 
+         if self.enableSessions:
+-            sessionName = md5.md5("%s-%d" % (reflect.qual(self.__class__), _sessionCounter())).hexdigest()
++            sessionName = md5("%s-%d" % (reflect.qual(self.__class__), _sessionCounter())).hexdigest()
+             ctx.set_session_id(sessionName)
+ 
+         if not self.enableSessionTickets:
+diff -up TwistedCore-8.2.0/twisted/persisted/sob.py.fix-hash-deprecation TwistedCore-8.2.0/twisted/persisted/sob.py
+--- TwistedCore-8.2.0/twisted/persisted/sob.py.fix-hash-deprecation	2008-07-29 16:13:54.000000000 -0400
++++ TwistedCore-8.2.0/twisted/persisted/sob.py	2010-06-08 14:49:17.594230464 -0400
+@@ -1,5 +1,5 @@
+ # -*- test-case-name: twisted.test.test_sob -*-
+-# Copyright (c) 2001-2004 Twisted Matrix Laboratories.
++# Copyright (c) 2001-2008 Twisted Matrix Laboratories.
+ # See LICENSE for details.
+ 
+ #
+@@ -9,7 +9,7 @@ Save and load Small OBjects to and from 
+ Maintainer: Moshe Zadka
+ """
+ 
+-import os, md5, sys
++import os, sys
+ try:
+     import cPickle as pickle
+ except ImportError:
+@@ -19,6 +19,7 @@ try:
+ except ImportError:
+     import StringIO
+ from twisted.python import log, runtime
++from twisted.python.hashlib import md5
+ from twisted.persisted import styles
+ from zope.interface import implements, Interface
+ 
+@@ -31,11 +32,11 @@ def _encrypt(passphrase, data):
+     leftover = len(data) % cipher.block_size
+     if leftover:
+         data += ' '*(cipher.block_size - leftover)
+-    return cipher.new(md5.new(passphrase).digest()[:16]).encrypt(data)
++    return cipher.new(md5(passphrase).digest()[:16]).encrypt(data)
+ 
+ def _decrypt(passphrase, data):
+     from Crypto.Cipher import AES
+-    return AES.new(md5.new(passphrase).digest()[:16]).decrypt(data)
++    return AES.new(md5(passphrase).digest()[:16]).decrypt(data)
+ 
+ 
+ class IPersistable(Interface):
+diff -up TwistedCore-8.2.0/twisted/protocols/sip.py.fix-hash-deprecation TwistedCore-8.2.0/twisted/protocols/sip.py
+--- TwistedCore-8.2.0/twisted/protocols/sip.py.fix-hash-deprecation	2006-07-01 12:08:17.000000000 -0400
++++ TwistedCore-8.2.0/twisted/protocols/sip.py	2010-06-08 14:49:17.594230464 -0400
+@@ -1,6 +1,6 @@
+ # -*- test-case-name: twisted.test.test_sip -*-
+ 
+-# Copyright (c) 2001-2004 Twisted Matrix Laboratories.
++# Copyright (c) 2001-2008 Twisted Matrix Laboratories.
+ # See LICENSE for details.
+ 
+ 
+@@ -14,12 +14,12 @@ Documented in RFC 2543.
+ import socket
+ import random
+ import time
+-import md5
+ import sys
+ from zope.interface import implements, Interface
+ 
+ # twisted imports
+ from twisted.python import log, util
++from twisted.python.hashlib import md5
+ from twisted.internet import protocol, defer, reactor
+ 
+ from twisted import cred
+@@ -132,7 +132,7 @@ def DigestCalcHA1(
+     pszNonce,
+     pszCNonce,
+ ):
+-    m = md5.md5()
++    m = md5()
+     m.update(pszUserName)
+     m.update(":")
+     m.update(pszRealm)
+@@ -140,7 +140,7 @@ def DigestCalcHA1(
+     m.update(pszPassword)
+     HA1 = m.digest()
+     if pszAlg == "md5-sess":
+-        m = md5.md5()
++        m = md5()
+         m.update(HA1)
+         m.update(":")
+         m.update(pszNonce)
+@@ -159,7 +159,7 @@ def DigestCalcResponse(
+     pszDigestUri,
+     pszHEntity,
+ ):
+-    m = md5.md5()
++    m = md5()
+     m.update(pszMethod)
+     m.update(":")
+     m.update(pszDigestUri)
+@@ -168,7 +168,7 @@ def DigestCalcResponse(
+         m.update(pszHEntity)
+     HA2 = m.digest().encode('hex')
+     
+-    m = md5.md5()
++    m = md5()
+     m.update(HA1)
+     m.update(":")
+     m.update(pszNonce)
+diff -up TwistedCore-8.2.0/twisted/python/filepath.py.fix-hash-deprecation TwistedCore-8.2.0/twisted/python/filepath.py
+--- TwistedCore-8.2.0/twisted/python/filepath.py.fix-hash-deprecation	2008-07-08 08:17:24.000000000 -0400
++++ TwistedCore-8.2.0/twisted/python/filepath.py	2010-06-08 14:49:17.595230817 -0400
+@@ -9,7 +9,6 @@ Object-oriented filesystem path represen
+ import os
+ import errno
+ import random
+-import sha
+ import base64
+ 
+ from os.path import isabs, exists, normpath, abspath, splitext
+@@ -25,6 +24,7 @@ from stat import S_ISREG, S_ISDIR
+ # modified for inclusion in the standard library.  --glyph
+ 
+ from twisted.python.runtime import platform
++from twisted.python.hashlib import sha1
+ 
+ from twisted.python.win32 import ERROR_FILE_NOT_FOUND, ERROR_PATH_NOT_FOUND
+ from twisted.python.win32 import ERROR_INVALID_NAME, ERROR_DIRECTORY
+@@ -120,7 +120,7 @@ def _secureEnoughString():
+     """
+     Create a pseudorandom, 16-character string for use in secure filenames.
+     """
+-    return armor(sha.new(randomBytes(64)).digest())[:16]
++    return armor(sha1(randomBytes(64)).digest())[:16]
+ 
+ 
+ 
+diff -up TwistedCore-8.2.0/twisted/python/hashlib.py.fix-hash-deprecation TwistedCore-8.2.0/twisted/python/hashlib.py
+--- TwistedCore-8.2.0/twisted/python/hashlib.py.fix-hash-deprecation	2010-06-08 14:49:17.595230817 -0400
++++ TwistedCore-8.2.0/twisted/python/hashlib.py	2010-06-08 14:49:17.595230817 -0400
+@@ -0,0 +1,24 @@
++# -*- test-case-name: twisted.python.test.test_hashlib -*-
++# Copyright (c) 2008 Twisted Matrix Laboratories.
++# See LICENSE for details.
++
++"""
++L{twisted.python.hashlib} presents a subset of the interface provided by
++U{hashlib<http://docs.python.org/library/hashlib.html>}.  The subset is the
++interface required by various parts of Twisted.  This allows application code
++to transparently use APIs which existed before C{hashlib} was introduced or to
++use C{hashlib} if it is available.
++"""
++
++
++try:
++    _hashlib = __import__("hashlib")
++except ImportError:
++    from md5 import md5
++    from sha import sha as sha1
++else:
++    md5  = _hashlib.md5
++    sha1 = _hashlib.sha1
++
++
++__all__ = ["md5", "sha1"]
+diff -up TwistedCore-8.2.0/twisted/python/otp.py.fix-hash-deprecation TwistedCore-8.2.0/twisted/python/otp.py
+--- TwistedCore-8.2.0/twisted/python/otp.py.fix-hash-deprecation	2004-08-25 04:36:30.000000000 -0400
++++ TwistedCore-8.2.0/twisted/python/otp.py	2010-06-08 14:49:17.596234349 -0400
+@@ -1,7 +1,9 @@
+-# Copyright (c) 2001-2004 Twisted Matrix Laboratories.
++# -*- test-case-name: twisted.python.test.test_otp -*-
++# Copyright (c) 2001-2008 Twisted Matrix Laboratories.
+ # See LICENSE for details.
+ 
+-""" A One-Time Password System based on RFC 2289
++"""
++A One-Time Password System based on RFC 2289
+ 
+ The class Authenticator contains the hashing-logic, and the parser for the
+ readable output. It also contains challenge which returns a string describing
+@@ -17,11 +19,21 @@ words for storing pronouncable 11-bit va
+ Uses the MD5- and SHA-algorithms for hashing
+ 
+ Todo: RFC2444, SASL (perhaps), parsing hex-responses
++
++This module is deprecated.  Consider using U{another Python OTP
++library<http://labix.org/python-otp>} instead.
+ """
+ 
++import warnings
+ import string
+ import random
+ 
++warnings.warn(
++    "twisted.python.otp is deprecated since Twisted 8.3.",
++    category=DeprecationWarning,
++    stacklevel=2)
++
++
+ def stringToLong(s):
+     """ Convert digest to long """
+     result = 0L
+@@ -47,33 +59,37 @@ def longToString(l):
+         result = chr(l % 256) + result
+         l = l / 256L
+     return result
+-        
+-import md5, sha
+-hashid = {md5: 'md5', sha: 'sha1'}
++
++from twisted.python.hashlib import md5, sha1
++hashid = {md5: 'md5', sha1: 'sha1'}
+ 
+ INITIALSEQUENCE = 1000
+ MINIMUMSEQUENCE = 50
+ 
+ class Unauthorized(Exception):
+     """the Unauthorized exception
+-    
++
+     This exception is raised when an action is not allowed, or a user is not
+     authenticated properly.
+     """
+ 
+ class OTPAuthenticator:
+-    """A One Time Password System
+-    
++    """
++    A One Time Password System
++
+     Based on RFC 2289, which is based on a the S/KEY Authentication-scheme.
+     It uses the MD5- and SHA-algorithms for hashing
+-    
+-    The variable OTP is at all times a 64bit string"""
+ 
++    The variable OTP is at all times a 64bit string.
++
++    @ivar hash: An object which can be used to compute hashes.  This is either
++        L{md5} or L{sha1}.
++    """
+     def __init__(self, hash = md5):
+         "Set the hash to either md5 or sha1"
+         self.hash = hash
+-        pass
+-    
++
++
+     def generateSeed(self):
+         "Return a 10 char random seed, with 6 lowercase chars and 4 digits"
+         seed = ''
+@@ -86,9 +102,9 @@ class OTPAuthenticator:
+     def foldDigest(self, otp):
+         if self.hash == md5:
+             return self.foldDigest128(otp)
+-        if self.hash == sha:
++        if self.hash == sha1:
+             return self.foldDigest160(otp)
+-    
++
+     def foldDigest128(self, otp128):
+         "Fold a 128 bit digest to 64 bit"
+         regs = stringToDWords(otp128)
+@@ -120,9 +136,9 @@ class OTPAuthenticator:
+ 
+     def hashUpdate(self, digest):
+         "Run through the hash and fold to 64 bit"
+-        h = self.hash.new(digest)
++        h = self.hash(digest)
+         return self.foldDigest(h.digest())
+-    
++
+     def generateOTP(self, seed, passwd, sequence):
+         """Return a 64 bit OTP based on inputs
+         Run through makeReadable to get a 6 word pass-phrase"""
+@@ -138,7 +154,7 @@ class OTPAuthenticator:
+         for i in xrange(0, 64, 2):
+             parity = parity + otp & 0x3
+             otp = otp >> 2
+-        return parity        
++        return parity
+ 
+     def makeReadable(self, otp):
+         "Returns a 6 word pass-phrase from a 64bit OTP"
+@@ -151,7 +167,7 @@ class OTPAuthenticator:
+         return string.join(list)
+ 
+     def challenge(self, seed, sequence):
+-        """Return a challenge in the format otp-<hash> <sequence> <seed>"""  
++        """Return a challenge in the format otp-<hash> <sequence> <seed>"""
+         return "otp-%s %i %s" % (hashid[self.hash], sequence, seed)
+ 
+     def parsePhrase(self, phrase):
+@@ -178,9 +194,9 @@ class OTP(OTPAuthenticator):
+     On the next authentication, the stored password is hashed and checked
+     up against the one given by the user. If they match, the sequencecounter
+     is decreased and the circle is closed.
+-    
++
+     This object should be glued to each user
+-    
++
+     Note:
+     It does NOT reset the sequence when the combinations left approach zero,
+     This has to be done manuelly by instancing a new object
+@@ -478,4 +494,3 @@ dict =  ["A",     "ABE",   "ACE",   "ACT
+ "WORM",  "WORN",  "WOVE",  "WRIT",  "WYNN",  "YALE",  "YANG",  "YANK",
+ "YARD",  "YARN",  "YAWL",  "YAWN",  "YEAH",  "YEAR",  "YELL",  "YOGA",
+ "YOKE"]
+-
+diff -up TwistedCore-8.2.0/twisted/python/test/test_hashlib.py.fix-hash-deprecation TwistedCore-8.2.0/twisted/python/test/test_hashlib.py
+--- TwistedCore-8.2.0/twisted/python/test/test_hashlib.py.fix-hash-deprecation	2010-06-08 14:49:17.597234047 -0400
++++ TwistedCore-8.2.0/twisted/python/test/test_hashlib.py	2010-06-08 14:49:17.597234047 -0400
+@@ -0,0 +1,90 @@
++# Copyright (c) 2008 Twisted Matrix Laboratories.
++# See LICENSE for details.
++
++"""
++Tests for L{twisted.python.hashlib}
++"""
++
++from twisted.trial.unittest import TestCase
++
++from twisted.python.hashlib import md5, sha1
++
++
++class HashObjectTests(TestCase):
++    """
++    Tests for the hash object APIs presented by L{hashlib}, C{md5} and C{sha1}.
++    """
++    def test_md5(self):
++        """
++        L{hashlib.md5} returns an object which can be used to compute an MD5
++        hash as defined by U{RFC 1321<http://www.ietf.org/rfc/rfc1321.txt>}.
++        """
++        # Test the result using values from section A.5 of the RFC.
++        self.assertEqual(
++            md5().hexdigest(), "d41d8cd98f00b204e9800998ecf8427e")
++        self.assertEqual(
++            md5("a").hexdigest(), "0cc175b9c0f1b6a831c399e269772661")
++        self.assertEqual(
++            md5("abc").hexdigest(), "900150983cd24fb0d6963f7d28e17f72")
++        self.assertEqual(
++            md5("message digest").hexdigest(),
++            "f96b697d7cb7938d525a2f31aaf161d0")
++        self.assertEqual(
++            md5("abcdefghijklmnopqrstuvwxyz").hexdigest(),
++            "c3fcd3d76192e4007dfb496cca67e13b")
++        self.assertEqual(
++            md5("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
++                "0123456789").hexdigest(),
++            "d174ab98d277d9f5a5611c2c9f419d9f")
++        self.assertEqual(
++            md5("1234567890123456789012345678901234567890123456789012345678901"
++                "2345678901234567890").hexdigest(),
++            "57edf4a22be3c955ac49da2e2107b67a")
++
++        # It should have digest and update methods, too.
++        self.assertEqual(
++            md5().digest().encode('hex'),
++            "d41d8cd98f00b204e9800998ecf8427e")
++        hash = md5()
++        hash.update("a")
++        self.assertEqual(
++            hash.digest().encode('hex'),
++            "0cc175b9c0f1b6a831c399e269772661")
++
++        # Instances of it should have a digest_size attribute
++        self.assertEqual(md5().digest_size, 16)
++
++
++    def test_sha1(self):
++        """
++        L{hashlib.sha1} returns an object which can be used to compute a SHA1
++        hash as defined by U{RFC 3174<http://tools.ietf.org/rfc/rfc3174.txt>}.
++        """
++        def format(s):
++            return ''.join(s.split()).lower()
++        # Test the result using values from section 7.3 of the RFC.
++        self.assertEqual(
++            sha1("abc").hexdigest(),
++            format(
++                "A9 99 3E 36 47 06 81 6A BA 3E 25 71 78 50 C2 6C 9C D0 D8 9D"))
++        self.assertEqual(
++            sha1("abcdbcdecdefdefgefghfghighijhi"
++                 "jkijkljklmklmnlmnomnopnopq").hexdigest(),
++            format(
++                "84 98 3E 44 1C 3B D2 6E BA AE 4A A1 F9 51 29 E5 E5 46 70 F1"))
++
++        # It should have digest and update methods, too.
++        self.assertEqual(
++            sha1("abc").digest().encode('hex'),
++            format(
++                "A9 99 3E 36 47 06 81 6A BA 3E 25 71 78 50 C2 6C 9C D0 D8 9D"))
++        hash = sha1()
++        hash.update("abc")
++        self.assertEqual(
++            hash.digest().encode('hex'),
++            format(
++                "A9 99 3E 36 47 06 81 6A BA 3E 25 71 78 50 C2 6C 9C D0 D8 9D"))
++
++        # Instances of it should have a digest_size attribute.
++        self.assertEqual(
++            sha1().digest_size, 20)
+diff -up TwistedCore-8.2.0/twisted/python/test/test_zipstream.py.fix-hash-deprecation TwistedCore-8.2.0/twisted/python/test/test_zipstream.py
+--- TwistedCore-8.2.0/twisted/python/test/test_zipstream.py.fix-hash-deprecation	2008-02-07 03:23:49.000000000 -0500
++++ TwistedCore-8.2.0/twisted/python/test/test_zipstream.py	2010-06-08 14:49:17.597234047 -0400
+@@ -6,10 +6,10 @@ Tests for L{twisted.python.zipstream}
+ """
+ import sys
+ import random
+-import md5
+ import zipfile
+ 
+ from twisted.python import zipstream, filepath
++from twisted.python.hashlib import md5
+ from twisted.trial import unittest
+ 
+ class FileEntryMixin:
+@@ -347,7 +347,7 @@ class ZipstreamTest(unittest.TestCase):
+         unzipIterChunky should unzip the given number of bytes per iteration.
+         """
+         junk = ' '.join([str(random.random()) for n in xrange(1000)])
+-        junkmd5 = md5.new(junk).hexdigest()
++        junkmd5 = md5(junk).hexdigest()
+ 
+         tempdir = filepath.FilePath(self.mktemp())
+         tempdir.makedirs()
+@@ -364,7 +364,7 @@ class ZipstreamTest(unittest.TestCase):
+         for r in uziter:
+             pass
+         self.assertEqual(r, 0)
+-        newmd5 = md5.new(
++        newmd5 = md5(
+             tempdir.child("zipstreamjunk").open().read()).hexdigest()
+         self.assertEqual(newmd5, junkmd5)
+ 
+diff -up TwistedCore-8.2.0/twisted/spread/pb.py.fix-hash-deprecation TwistedCore-8.2.0/twisted/spread/pb.py
+--- TwistedCore-8.2.0/twisted/spread/pb.py.fix-hash-deprecation	2008-07-29 16:13:54.000000000 -0400
++++ TwistedCore-8.2.0/twisted/spread/pb.py	2010-06-08 14:49:17.598231136 -0400
+@@ -27,7 +27,6 @@ To get started, begin with L{PBClientFac
+ @author: Glyph Lefkowitz
+ """
+ 
+-import md5
+ import random
+ import new
+ import types
+@@ -38,6 +37,7 @@ from zope.interface import implements, I
+ from twisted.python import log, failure, reflect
+ from twisted.python.versions import Version
+ from twisted.python.deprecate import deprecated
++from twisted.python.hashlib import md5
+ from twisted.internet import defer, protocol
+ from twisted.cred.portal import Portal
+ from twisted.cred.credentials import IAnonymous, ICredentials
+@@ -997,10 +997,10 @@ def respond(challenge, password):
+ 
+     This is useful for challenge/response authentication.
+     """
+-    m = md5.new()
++    m = md5()
+     m.update(password)
+     hashedPassword = m.digest()
+-    m = md5.new()
++    m = md5()
+     m.update(hashedPassword)
+     m.update(challenge)
+     doubleHashedPassword = m.digest()
+@@ -1011,7 +1011,7 @@ def challenge():
+     crap = ''
+     for x in range(random.randrange(15,25)):
+         crap = crap + chr(random.randint(65,90))
+-    crap = md5.new(crap).digest()
++    crap = md5(crap).digest()
+     return crap
+ 
+ 
+@@ -1340,12 +1340,12 @@ class _PortalAuthChallenger(Referenceabl
+ 
+     # IUsernameHashedPassword:
+     def checkPassword(self, password):
+-        return self.checkMD5Password(md5.md5(password).digest())
++        return self.checkMD5Password(md5(password).digest())
+ 
+ 
+     # IUsernameMD5Password
+     def checkMD5Password(self, md5Password):
+-        md = md5.new()
++        md = md5()
+         md.update(md5Password)
+         md.update(self.challenge)
+         correct = md.digest()
+diff -up TwistedCore-8.2.0/twisted/test/test_newcred.py.fix-hash-deprecation TwistedCore-8.2.0/twisted/test/test_newcred.py
+--- TwistedCore-8.2.0/twisted/test/test_newcred.py.fix-hash-deprecation	2007-07-28 08:44:09.000000000 -0400
++++ TwistedCore-8.2.0/twisted/test/test_newcred.py	2010-06-08 14:49:17.598231136 -0400
+@@ -1,8 +1,8 @@
+-# Copyright (c) 2001-2007 Twisted Matrix Laboratories.
++# Copyright (c) 2001-2008 Twisted Matrix Laboratories.
+ # See LICENSE for details.
+ 
+ """
+-Now with 30% more starch.
++Tests for L{twisted.cred}, now with 30% more starch.
+ """
+ 
+ 
+@@ -10,7 +10,7 @@ import hmac
+ from zope.interface import implements, Interface
+ 
+ from twisted.trial import unittest
+-from twisted.cred import portal, checkers, credentials, error
++from twisted.cred import portal, checkers, credentials, error, util
+ from twisted.python import components
+ from twisted.internet import defer
+ from twisted.internet.defer import deferredGenerator as dG, waitForDeferred as wFD
+@@ -27,6 +27,49 @@ except ImportError:
+ else:
+     from twisted.cred import pamauth
+ 
++
++class DeprecatedUtilTests(unittest.TestCase):
++    """
++    Tests for the deprecation of the functions in L{twisted.cred.util}.
++    """
++    def test_respond(self):
++        """
++        L{respond} applies a particular hashing to a challenge and a password
++        and returns the result.  It is deprecated and calling it emits a
++        deprecation warning.
++        """
++        # Use some values and test against the known correct output.
++        self.assertEqual(
++            util.respond('foo', 'bar').encode('hex'),
++            'ebe4a2902532198cafaa223fb5ac0f20')
++
++        warnings = self.flushWarnings(offendingFunctions=[self.test_respond])
++        self.assertEqual(
++            warnings[0]['message'],
++            'twisted.cred.util.respond is deprecated since Twisted 8.3.')
++        self.assertEqual(
++            warnings[0]['category'],
++            PendingDeprecationWarning)
++        self.assertEqual(len(warnings), 1)
++
++
++    def test_challenge(self):
++        """
++        L{challenge} returns a different string each time it is called.
++        """
++        self.assertNotEqual(util.challenge(), util.challenge())
++        warnings = self.flushWarnings(offendingFunctions=[self.test_challenge])
++        for w in warnings:
++            self.assertEqual(
++                w['message'],
++                'twisted.cred.util.challenge is deprecated since Twisted 8.3.')
++            self.assertEqual(
++                w['category'],
++                PendingDeprecationWarning)
++        self.assertEqual(len(warnings), 2)
++
++
++
+ class ITestable(Interface):
+     pass
+ 
+diff -up TwistedCore-8.2.0/twisted/trial/test/test_loader.py.fix-hash-deprecation TwistedCore-8.2.0/twisted/trial/test/test_loader.py
+--- TwistedCore-8.2.0/twisted/trial/test/test_loader.py.fix-hash-deprecation	2008-09-01 12:42:51.000000000 -0400
++++ TwistedCore-8.2.0/twisted/trial/test/test_loader.py	2010-06-08 14:49:17.599232006 -0400
+@@ -5,12 +5,12 @@
+ Tests for loading tests by name.
+ """
+ 
+-import md5
+ import os
+ import shutil
+ import sys
+ 
+ from twisted.python import util
++from twisted.python.hashlib import md5
+ from twisted.trial.test import packages
+ from twisted.trial import runner, reporter, unittest
+ from twisted.trial.itrial import ITestCase
+@@ -484,7 +484,7 @@ class PackageOrderingTest(packages.SysPa
+ #             if isinstance(s, type) or isinstance(s, types.ClassType):
+ #                 return s.__module__+'.'+s.__name__
+             n = runner.name(s)
+-            d = md5.new(n).hexdigest()
++            d = md5(n).hexdigest()
+             return d
+         self.loadSortedPackages(sillySorter)
+ 
+diff -up TwistedCore-8.2.0/twisted/words/test/test_oscar.py.fix-hash-deprecation TwistedCore-8.2.0/twisted/words/test/test_oscar.py
+--- TwistedCore-8.2.0/twisted/words/test/test_oscar.py.fix-hash-deprecation	2010-06-08 14:49:17.599232006 -0400
++++ TwistedCore-8.2.0/twisted/words/test/test_oscar.py	2010-06-08 14:49:17.599232006 -0400
+@@ -0,0 +1,24 @@
++# Copyright (c) 2008 Twisted Matrix Laboratories.
++# See LICENSE for details.
++
++"""
++Tests for L{twisted.words.protocols.oscar}.
++"""
++
++from twisted.trial.unittest import TestCase
++
++from twisted.words.protocols.oscar import encryptPasswordMD5
++
++
++class PasswordTests(TestCase):
++    """
++    Tests for L{encryptPasswordMD5}.
++    """
++    def test_encryptPasswordMD5(self):
++        """
++        L{encryptPasswordMD5} hashes the given password and key and returns a
++        string suitable to use to authenticate against an OSCAR server.
++        """
++        self.assertEqual(
++            encryptPasswordMD5('foo', 'bar').encode('hex'),
++            'd73475c370a7b18c6c20386bcf1339f2')
